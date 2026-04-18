@@ -111,7 +111,7 @@
       "description": "Use Apify Proxy for reliable requests.",
       "editor": "proxy",
       "default": {
-        "useApifyProxy": true
+        "useApifyProxy": false
       }
     }
   },

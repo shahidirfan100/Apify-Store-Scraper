@@ -6,11 +6,5 @@
 	"pricingModel": "All pricing models",
 	"developers": "All developers",
 	"results_wanted": 20,
-	"max_pages": 10,
-	"proxyConfiguration": {
-		"useApifyProxy": true,
-		"apifyProxyGroups": [
-			"RESIDENTIAL"
-		]
-	}
+	"max_pages": 10
 }
