@@ -1,0 +1,120 @@
+{
+  "title": "Apify Store Scraper",
+  "description": "Scrape actor listings from Apify Store using URL, keyword, category, pagination, and proxy configuration.",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "url": {
+      "title": "URL",
+      "type": "string",
+      "description": "Apify profile URL or API store URL. Example: https://apify.com/shahidirfan",
+      "editor": "textfield",
+      "prefill": "https://apify.com/shahidirfan"
+    },
+    "keyword": {
+      "title": "Keyword",
+      "type": "string",
+      "description": "Search keyword for actor listings.",
+      "editor": "textfield",
+      "prefill": "linkedin"
+    },
+    "category": {
+      "title": "Category",
+      "type": "string",
+      "description": "Store category filter.",
+      "editor": "select",
+      "enum": [
+        "All categories",
+        "Social media",
+        "AI",
+        "Agents",
+        "Lead generation",
+        "E-commerce",
+        "SEO tools",
+        "Jobs",
+        "MCP servers",
+        "News",
+        "Real estate",
+        "Developer tools",
+        "Travel",
+        "Videos",
+        "Automation",
+        "Integrations",
+        "Open source",
+        "Other"
+      ],
+      "default": "All categories",
+      "prefill": "All categories"
+    },
+    "sort": {
+      "title": "Sort",
+      "type": "string",
+      "description": "Sort collected results.",
+      "editor": "select",
+      "enum": [
+        "Most Relevant",
+        "Newest",
+        "Pouplar",
+        "Recently updated"
+      ],
+      "default": "Most Relevant",
+      "prefill": "Most Relevant"
+    },
+    "pricingModel": {
+      "title": "Pricing model",
+      "type": "string",
+      "description": "Filter actors by pricing model.",
+      "editor": "select",
+      "enum": [
+        "All pricing models",
+        "Pay per event",
+        "Pay per Usage",
+        "Rental"
+      ],
+      "default": "All pricing models",
+      "prefill": "All pricing models"
+    },
+    "developers": {
+      "title": "Developers",
+      "type": "string",
+      "description": "Developer maintenance group.",
+      "editor": "select",
+      "enum": [
+        "All developers",
+        "Maintained by Apify",
+        "Maintained by Community"
+      ],
+      "default": "All developers",
+      "prefill": "All developers"
+    },
+    "results_wanted": {
+      "title": "Results wanted",
+      "type": "integer",
+      "description": "Maximum number of results to collect.",
+      "minimum": 1,
+      "default": 20,
+      "prefill": 20,
+      "editor": "number"
+    },
+    "max_pages": {
+      "title": "Max pages",
+      "type": "integer",
+      "description": "Safety cap for pagination.",
+      "minimum": 1,
+      "default": 10,
+      "prefill": 10,
+      "editor": "number"
+    },
+    "proxyConfiguration": {
+      "title": "Proxy configuration",
+      "type": "object",
+      "description": "Use Apify Proxy for reliable requests.",
+      "editor": "proxy",
+      "default": {
+        "useApifyProxy": true
+      }
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

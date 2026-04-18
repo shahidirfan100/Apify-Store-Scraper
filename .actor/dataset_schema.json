@@ -1,0 +1,70 @@
+{
+  "actorSpecification": 1,
+  "fields": {
+    "actorFullName": "Actor",
+    "title": "Title",
+    "name": "Name",
+    "username": "Owner",
+    "url": "URL",
+    "categories": "Categories",
+    "bookmarkCount": "Bookmarks",
+    "actorReviewRating": "Rating",
+    "actorReviewCount": "Reviews",
+    "notice": "Notice",
+    "fetchedAt": "Fetched At"
+  },
+  "views": {
+    "overview": {
+      "title": "Overview",
+      "transformation": {
+        "fields": [
+          "actorFullName",
+          "title",
+          "username",
+          "categories",
+          "bookmarkCount",
+          "actorReviewRating",
+          "actorReviewCount",
+          "url"
+        ]
+      },
+      "display": {
+        "component": "table",
+        "properties": {
+          "actorFullName": {
+            "label": "Actor",
+            "format": "text"
+          },
+          "title": {
+            "label": "Title",
+            "format": "text"
+          },
+          "username": {
+            "label": "Owner",
+            "format": "text"
+          },
+          "categories": {
+            "label": "Categories",
+            "format": "text"
+          },
+          "bookmarkCount": {
+            "label": "Bookmarks",
+            "format": "text"
+          },
+          "actorReviewRating": {
+            "label": "Rating",
+            "format": "text"
+          },
+          "actorReviewCount": {
+            "label": "Reviews",
+            "format": "text"
+          },
+          "url": {
+            "label": "URL",
+            "format": "link"
+          }
+        }
+      }
+    }
+  }
+}
