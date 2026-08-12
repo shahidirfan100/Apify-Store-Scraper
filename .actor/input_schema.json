@@ -1,6 +1,6 @@
 {
   "title": "Apify Store Scraper",
-  "description": "Scrape actor listings from Apify Store using URL, keyword, category, pagination, and proxy configuration.",
+  "description": "Scrape actor listings from Apify Store using URL, keyword, category, sorting, pricing, developer filters, and pagination.",
   "type": "object",
   "schemaVersion": 1,
   "properties": {
@@ -104,15 +104,6 @@
       "default": 10,
       "prefill": 10,
       "editor": "number"
-    },
-    "proxyConfiguration": {
-      "title": "Proxy configuration",
-      "type": "object",
-      "description": "Use Apify Proxy for reliable requests.",
-      "editor": "proxy",
-      "default": {
-        "useApifyProxy": false
-      }
     }
   },
   "required": [],

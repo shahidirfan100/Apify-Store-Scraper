@@ -62,8 +62,6 @@ const normalizeDevelopers = (value) => {
     return 'ALL_DEVELOPERS';
 };
 
-const hasApifyProxyCredentials = () => Boolean(process.env.APIFY_PROXY_PASSWORD || process.env.APIFY_TOKEN);
-
 const pruneEmpty = (value) => {
     if (Array.isArray(value)) {
         const cleaned = value
@@ -269,7 +267,6 @@ async function main() {
             developers,
             results_wanted = 20,
             max_pages = 10,
-            proxyConfiguration,
         } = input;
 
         const parsedFromUrl = parseFiltersFromUrl(url);
@@ -292,20 +289,6 @@ async function main() {
         const wanted = normalizeInteger(results_wanted, 20, 1, 5000);
         const maxPages = normalizeInteger(max_pages, 10, 1, 1000);
 
-        let proxyConfig;
-        if (proxyConfiguration) {
-            try {
-                const useApifyProxy = Boolean(proxyConfiguration?.useApifyProxy);
-                if (useApifyProxy && !hasApifyProxyCredentials()) {
-                    log.warning('Skipping Apify Proxy because local proxy credentials are missing.');
-                } else {
-                    proxyConfig = await Actor.createProxyConfiguration(proxyConfiguration);
-                }
-            } catch (error) {
-                log.warning(`Proxy initialization failed, continuing without proxy: ${error.message}`);
-            }
-        }
-
         let offset = 0;
         let page = 1;
         let totalAvailable = Number.POSITIVE_INFINITY;
@@ -320,21 +303,11 @@ async function main() {
                 limit: PAGE_SIZE,
             });
 
-            let proxyUrl;
-            if (proxyConfig) {
-                try {
-                    proxyUrl = await proxyConfig.newUrl();
-                } catch (error) {
-                    log.warning(`Proxy URL generation failed, retrying without proxy: ${error.message}`);
-                    proxyConfig = undefined;
-                }
-            }
-            log.info(`Fetching page ${page}`, { apiUrl, proxy: Boolean(proxyUrl) });
+            log.info(`Fetching page ${page}`, { apiUrl });
 
             let body;
             try {
                 const response = await gotScraping.get(apiUrl, {
-                    proxyUrl,
                     headers: {
                         Accept: 'application/json',
                         'Accept-Language': 'en-US,en;q=0.9',
@@ -346,29 +319,8 @@ async function main() {
                 });
                 body = response.body;
             } catch (error) {
-                if (proxyUrl) {
-                    log.warning(`Request with proxy failed on page ${page}, retrying without proxy`, { error: error.message });
-                    try {
-                        const fallbackResponse = await gotScraping.get(apiUrl, {
-                            headers: {
-                                Accept: 'application/json',
-                                'Accept-Language': 'en-US,en;q=0.9',
-                                'User-Agent': USER_AGENT,
-                            },
-                            timeout: {
-                                request: 30000,
-                            },
-                        });
-                        body = fallbackResponse.body;
-                        proxyConfig = undefined;
-                    } catch (fallbackError) {
-                        log.error(`Request failed on page ${page}`, { error: fallbackError.message });
-                        break;
-                    }
-                } else {
-                    log.error(`Request failed on page ${page}`, { error: error.message });
-                    break;
-                }
+                log.error(`Request failed on page ${page}`, { error: error.message });
+                break;
             }
 
             let parsed;
