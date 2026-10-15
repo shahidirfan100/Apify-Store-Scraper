@@ -1,9 +1,6 @@
 import { Actor, log } from 'apify';
 import { Dataset } from 'crawlee';
 import { gotScraping } from 'got-scraping';
-import { readFile } from 'node:fs/promises';
-
-await Actor.init();
 
 const STORE_API_URL = 'https://api.apify.com/v2/store';
 const PAGE_SIZE = 50;
@@ -49,8 +46,9 @@ const normalizeSort = (value) => {
     const text = normalizeText(value);
     if (!text) return 'MOST_RELEVANT';
     const normalized = text.replace(/[\s-]+/g, '_').toUpperCase();
-        const valid = new Set(['MOST_RELEVANT', 'NEWEST', 'POPULAR', 'RECENTLY_UPDATED']);
-        return valid.has(normalized) || normalized === 'POUPLAR' ? 'POPULAR' : 'MOST_RELEVANT';
+    const valid = new Set(['MOST_RELEVANT', 'NEWEST', 'POPULAR', 'RECENTLY_UPDATED']);
+    if (normalized === 'POUPLAR') return 'POPULAR';
+    return valid.has(normalized) ? normalized : 'MOST_RELEVANT';
 };
 
 const normalizeDevelopers = (value) => {
@@ -82,29 +80,6 @@ const pruneEmpty = (value) => {
     if (value === null || value === undefined) return undefined;
     if (typeof value === 'string' && value.trim() === '') return undefined;
     return value;
-};
-
-const hasProvidedValue = (value) => {
-    if (value === null || value === undefined) return false;
-    if (typeof value === 'string') return value.trim().length > 0;
-    if (Array.isArray(value)) return value.length > 0;
-    if (typeof value === 'object') return Object.keys(value).length > 0;
-    return true;
-};
-
-const hasRuntimeInput = (input) => {
-    if (!input || typeof input !== 'object') return false;
-    return Object.keys(input).some((key) => hasProvidedValue(input[key]));
-};
-
-const loadInputJsonFallback = async () => {
-    try {
-        const content = await readFile(new URL('../INPUT.json', import.meta.url), 'utf8');
-        const parsed = JSON.parse(content);
-        return parsed && typeof parsed === 'object' ? parsed : {};
-    } catch {
-        return {};
-    }
 };
 
 const parseFiltersFromUrl = (inputUrl) => {
@@ -248,149 +223,138 @@ const mapStoreItem = (item, queryMeta) => {
 };
 
 async function main() {
-    try {
-        const runtimeInput = (await Actor.getInput()) || {};
-        const input = hasRuntimeInput(runtimeInput)
-            ? runtimeInput
-            : await loadInputJsonFallback();
+    const runtimeInput = (await Actor.getInput()) || {};
+    const {
+        url,
+        keyword,
+        category,
+        sort,
+        pricingModel,
+        developers,
+        results_wanted = 20,
+        max_pages = 10,
+    } = runtimeInput;
 
-        if (!hasRuntimeInput(runtimeInput) && hasRuntimeInput(input)) {
-            log.info('Using INPUT.json fallback because runtime input is empty.');
-        }
+    const keywordSearch = normalizeText(keyword);
+    const parsedFromUrl = keywordSearch ? {} : parseFiltersFromUrl(url);
 
-        const {
-            url,
-            keyword,
-            category,
-            sort,
-            pricingModel,
-            developers,
-            results_wanted = 20,
-            max_pages = 10,
-        } = input;
+    const effectiveDevelopers = normalizeDevelopers(developers);
+    const effectiveSort = normalizeSort(sort) || parsedFromUrl.sort || 'MOST_RELEVANT';
+    const effectivePricingModel = normalizePricingModel(pricingModel) || parsedFromUrl.pricingModel || 'ALL_PRICING_MODELS';
 
-        const parsedFromUrl = parseFiltersFromUrl(url);
+    const effectiveFilters = pruneEmpty({
+        username: parsedFromUrl.username,
+        keyword: keywordSearch || parsedFromUrl.keyword,
+        category: normalizeCategory(category) || parsedFromUrl.category,
+        pricingModel: effectivePricingModel === 'ALL_PRICING_MODELS' ? undefined : effectivePricingModel,
+    }) || {};
 
-        const effectiveDevelopers = normalizeDevelopers(developers);
-        const effectiveSort = normalizeSort(sort) || parsedFromUrl.sort || 'MOST_RELEVANT';
-        const effectivePricingModel = normalizePricingModel(pricingModel) || parsedFromUrl.pricingModel || 'ALL_PRICING_MODELS';
+    if (!effectiveFilters.username && !effectiveFilters.keyword && !effectiveFilters.category && !effectiveFilters.pricingModel && effectiveDevelopers === 'ALL_DEVELOPERS') {
+        throw new Error('Please provide at least one filter: url, keyword, category, pricingModel, or developers.');
+    }
 
-        const effectiveFilters = pruneEmpty({
-            username: parsedFromUrl.username,
-            keyword: normalizeText(keyword) || parsedFromUrl.keyword,
-            category: normalizeCategory(category) || parsedFromUrl.category,
-            pricingModel: effectivePricingModel === 'ALL_PRICING_MODELS' ? undefined : effectivePricingModel,
-        }) || {};
+    const wanted = normalizeInteger(results_wanted, 20, 1, 5000);
+    const maxPages = normalizeInteger(max_pages, 10, 1, 1000);
 
-        if (!effectiveFilters.username && !effectiveFilters.keyword && !effectiveFilters.category && !effectiveFilters.pricingModel && effectiveDevelopers === 'ALL_DEVELOPERS') {
-            throw new Error('Please provide at least one filter: url, keyword, category, pricingModel, or developers.');
-        }
+    let offset = 0;
+    let page = 1;
+    let totalAvailable = Number.POSITIVE_INFINITY;
+    const collected = [];
+    const requiresFullScan = effectiveSort !== 'MOST_RELEVANT';
+    let processedPages = 0;
 
-        const wanted = normalizeInteger(results_wanted, 20, 1, 5000);
-        const maxPages = normalizeInteger(max_pages, 10, 1, 1000);
+    while (page <= maxPages && offset < totalAvailable) {
+        const apiUrl = buildStoreUrl({
+            ...effectiveFilters,
+            offset,
+            limit: PAGE_SIZE,
+        });
 
-        let offset = 0;
-        let page = 1;
-        let totalAvailable = Number.POSITIVE_INFINITY;
-        const collected = [];
-        const requiresFullScan = effectiveSort !== 'MOST_RELEVANT';
-        let processedPages = 0;
+        log.info(`Fetching page ${page}`, { apiUrl });
 
-        while (page <= maxPages && offset < totalAvailable) {
-            const apiUrl = buildStoreUrl({
-                ...effectiveFilters,
-                offset,
-                limit: PAGE_SIZE,
+        let body;
+        try {
+            const response = await gotScraping.get(apiUrl, {
+                headers: {
+                    Accept: 'application/json',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'User-Agent': USER_AGENT,
+                },
+                timeout: {
+                    request: 30000,
+                },
             });
-
-            log.info(`Fetching page ${page}`, { apiUrl });
-
-            let body;
-            try {
-                const response = await gotScraping.get(apiUrl, {
-                    headers: {
-                        Accept: 'application/json',
-                        'Accept-Language': 'en-US,en;q=0.9',
-                        'User-Agent': USER_AGENT,
-                    },
-                    timeout: {
-                        request: 30000,
-                    },
-                });
-                body = response.body;
-            } catch (error) {
-                log.error(`Request failed on page ${page}`, { error: error.message });
-                break;
-            }
-
-            let parsed;
-            try {
-                parsed = JSON.parse(body);
-            } catch {
-                log.error(`Invalid JSON response on page ${page}`);
-                break;
-            }
-
-            const items = Array.isArray(parsed?.data?.items) ? parsed.data.items : [];
-            const reportedTotal = Number(parsed?.data?.total);
-            if (Number.isFinite(reportedTotal) && reportedTotal >= 0) {
-                totalAvailable = reportedTotal;
-            }
-
-            if (!items.length) {
-                log.info('No more items available. Stopping.');
-                break;
-            }
-
-            const mappedItems = items
-                .map((item) => mapStoreItem(item, effectiveFilters))
-                .filter(Boolean);
-
-            const filteredByPricing = applyPricingModelFilter(mappedItems, effectivePricingModel);
-            const filteredByDeveloper = applyDeveloperFilter(filteredByPricing, effectiveDevelopers);
-
-            if (!mappedItems.length) {
-                log.warning('Current page produced no valid records after cleaning.');
-            }
-
-            collected.push(...filteredByDeveloper);
-            offset += items.length;
-            processedPages += 1;
-
-            log.info(`Collected ${filteredByDeveloper.length} items from current page`, {
-                page,
-                collected: collected.length,
-                wanted,
-                offset,
-                totalAvailable,
-            });
-
-            if (items.length === 0) break;
-            if (!requiresFullScan && collected.length >= wanted) break;
-            page++;
+            body = response.body;
+        } catch (error) {
+            log.error(`Request failed on page ${page}`, { error: error.message });
+            throw error;
         }
 
-        const sorted = sortItems(collected, effectiveSort);
-        const finalItems = sorted.slice(0, wanted);
-
-        if (!finalItems.length) {
-            log.warning('No matching records found for the selected filters.');
-        } else {
-            await Dataset.pushData(finalItems);
+        let parsed;
+        try {
+            parsed = JSON.parse(body);
+        } catch {
+            log.error(`Invalid JSON response on page ${page}`);
+            throw new Error(`Invalid JSON response on page ${page}`);
         }
 
-        log.info('Run completed', {
-            saved: finalItems.length,
+        const items = Array.isArray(parsed?.data?.items) ? parsed.data.items : [];
+        const reportedTotal = Number(parsed?.data?.total);
+        if (Number.isFinite(reportedTotal) && reportedTotal >= 0) {
+            totalAvailable = reportedTotal;
+        }
+
+        if (!items.length) {
+            log.info('No more items available. Stopping.');
+            break;
+        }
+
+        const mappedItems = items
+            .map((item) => mapStoreItem(item, effectiveFilters))
+            .filter(Boolean);
+
+        const filteredByPricing = applyPricingModelFilter(mappedItems, effectivePricingModel);
+        const filteredByDeveloper = applyDeveloperFilter(filteredByPricing, effectiveDevelopers);
+
+        if (!mappedItems.length) {
+            log.warning('Current page produced no valid records after cleaning.');
+        }
+
+        collected.push(...filteredByDeveloper);
+        offset += items.length;
+        processedPages += 1;
+
+        log.info(`Collected ${filteredByDeveloper.length} items from current page`, {
+            page,
             collected: collected.length,
             wanted,
-            pagesProcessed: processedPages,
-            sort: effectiveSort,
-            pricingModel: effectivePricingModel || 'ANY',
-            developers: effectiveDevelopers,
+            offset,
+            totalAvailable,
         });
-    } finally {
-        await Actor.exit();
+
+        if (items.length === 0) break;
+        if (!requiresFullScan && collected.length >= wanted) break;
+        page++;
     }
+
+    const sorted = sortItems(collected, effectiveSort);
+    const finalItems = sorted.slice(0, wanted);
+
+    if (!finalItems.length) {
+        log.warning('No matching records found for the selected filters.');
+    } else {
+        await Dataset.pushData(finalItems);
+    }
+
+    log.info('Run completed', {
+        saved: finalItems.length,
+        collected: collected.length,
+        wanted,
+        pagesProcessed: processedPages,
+        sort: effectiveSort,
+        pricingModel: effectivePricingModel || 'ANY',
+        developers: effectiveDevelopers,
+    });
 }
 
-main().catch(err => { console.error(err); process.exit(1); });
+await Actor.main(main);

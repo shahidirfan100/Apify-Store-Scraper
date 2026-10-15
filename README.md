@@ -41,6 +41,8 @@ Each dataset item can include the actor name, owner, listing URL, description, c
 
 The simplest run uses the default Shahid Irfan profile URL. For broader marketplace research, combine a keyword with a category, pricing model, or developer filter.
 
+When both `url` and `keyword` are submitted, the keyword search takes precedence and URL-derived filters are ignored. This lets a keyword run work with the default profile URL still present in the Console form.
+
 ## Input Parameters
 
 | Parameter | Type | Required | Default | Description |
